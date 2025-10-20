@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="emerald">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Admin Torneo FIFA</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+      href="https://cdn.jsdelivr.net/npm/daisyui@4.12.10/dist/full.min.css"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <!-- Fecha/hora -->
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/es.js"></script>
+  </head>
+
+  <body class="bg-base-200 p-4 max-w-5xl mx-auto mt-8">
+    <div class="flex justify-end mb-2">
+      <button id="logoutBtn" class="btn btn-outline">Cerrar sesión</button>
+    </div>
+
+    <!-- PANEL DE ACCESO -->
+    <section class="card bg-base-100 shadow mb-4">
+      <div class="card-body">
+        <h2 class="card-title">Acceso Admin</h2>
+        <div class="grid gap-2 sm:grid-cols-3">
+          <input
+            id="email"
+            type="email"
+            placeholder="Email"
+            class="input input-bordered"
+          />
+          <input
+            id="password"
+            type="password"
+            placeholder="Contraseña"
+            class="input input-bordered"
+          />
+          <button id="loginBtn" class="btn btn-primary">Entrar</button>
+        </div>
+        <p id="authStatus" class="text-sm opacity-70"></p>
+      </div>
+    </section>
+
+    <!-- PANEL ADMIN -->
+    <section id="adminPanels" class="hidden space-y-4">
+      <!-- Datos del torneo -->
+      <div class="card bg-base-100 shadow">
+        <div class="card-body">
+          <h3 class="card-title">Configuración del torneo</h3>
+          <div class="grid gap-2 sm:grid-cols-3 items-end">
+            <div>
+              <label class="label"><span class="label-text">Slug</span></label>
+              <input id="tSlug" class="input input-bordered" disabled />
+            </div>
+            <div>
+              <label class="label"
+                ><span class="label-text">Nombre</span></label
+              >
+              <input id="tName" class="input input-bordered" disabled />
+            </div>
+            <div>
+              <label class="label"
+                ><span class="label-text">Fecha/hora base</span></label
+              >
+              <input
+                id="tStart"
+                class="input input-bordered"
+                placeholder="DD-MM-YYYY HH:mm"
+              />
+            </div>
+          </div>
+          <div class="mt-3 flex gap-2 flex-wrap">
+            <button id="btnSetStart" class="btn">Guardar fecha base</button>
+            <button id="btnGenerateGroups" class="btn btn-success">
+              Generar grupos + calendario
+            </button>
+            <button id="btnNextPhase" class="btn btn-primary">
+              Generar siguiente fase
+            </button>
+          </div>
+          <p id="tMsg" class="text-sm opacity-70 mt-1"></p>
+        </div>
+      </div>
+
+      <!-- Gestión de jugadores -->
+      <div class="card bg-base-100 shadow">
+        <div class="card-body">
+          <h3 class="card-title">Jugadores (máx. 24)</h3>
+          <div class="grid gap-2 sm:grid-cols-4">
+            <input
+              id="playerNickname"
+              class="input input-bordered sm:col-span-3"
+              placeholder="Apodo / Nombre visible"
+            />
+            <button id="btnAddPlayer" class="btn btn-success">
+              Agregar jugador
+            </button>
+          </div>
+          <p id="playerMsg" class="text-sm opacity-70 mt-1"></p>
+
+          <div class="overflow-x-auto mt-3">
+            <table class="table table-sm">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Jugador</th>
+                  <th class="text-right">Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="playersTable"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Partidos programados -->
+      <div class="card bg-base-100 shadow">
+        <div class="card-body">
+          <div class="flex items-center justify-between">
+            <h3 class="card-title">Partidos</h3>
+            <div class="text-xs opacity-70">
+              Tip: puedes cambiar fecha/hora por fila
+            </div>
+          </div>
+
+          <!-- Filtros rápidos -->
+          <div class="mb-3 grid gap-2 sm:grid-cols-4 items-end">
+            <input
+              id="filterStage"
+              class="input input-bordered"
+              placeholder="Filtro por fase (group/quarter/semi/final)"
+            />
+            <input
+              id="filterDate"
+              class="input input-bordered"
+              placeholder="DD-MM-YYYY"
+            />
+            <button id="btnHoy" class="btn">Hoy</button>
+            <button id="btnClear" class="btn btn-ghost">Limpiar</button>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="table table-sm">
+              <thead>
+                <tr>
+                  <th>Fase</th>
+                  <th>Grupo</th>
+                  <th>Local</th>
+                  <th>Visitante</th>
+                  <th>Fecha/Hora</th>
+                  <th>Estado</th>
+                  <th class="whitespace-nowrap">Score (L - V)</th>
+                  <th class="text-right">Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="matchesTable"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Orden de carga: env -> supabase -> libs lógica -> admin -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="./js/env.js"></script>
+    <script type="module" src="./js/supabase.js"></script>
+
+    <script src="./js/env.js"></script>
+    <script type="module" src="./js/helpers.js"></script>
+    <script type="module" src="./js/standings.js"></script>
+    <script type="module" src="./js/generator.js"></script>
+    <script type="module" src="./js/supabase.js"></script>
+    <script type="module" src="./js/admin.js"></script>
+  </body>
+</html>
