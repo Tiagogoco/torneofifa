@@ -79,13 +79,12 @@ export async function listGroups(tournament_id) {
    Matches
 ---------------------- */
 export async function listMatches(tournament_id, stage = null) {
-  // Incluye alias a jugadores por sus FKs
-  // Asegúrate de que las constraints se llamen matches_home_player_id_fkey / matches_away_player_id_fkey (default)
   let query = sb
     .from("matches")
     .select(
       `
       id, tournament_id, stage, group_id, start_at, status, score_home, score_away, created_at,
+      home_player_id, away_player_id,
       home:players!matches_home_player_id_fkey(id, nickname),
       away:players!matches_away_player_id_fkey(id, nickname)
     `
@@ -125,4 +124,33 @@ export async function updateMatchTime(match_id, start_at_iso) {
     .single();
   if (error) throw error;
   return data;
+}
+
+// Devuelve { match, winnerPlayer, runnerUpPlayer } o null si no hay final jugada
+export async function getChampionFromFinal(tournament_id) {
+  const { data: finals, error } = await sb
+    .from("matches")
+    .select(
+      `
+      id, stage, status, score_home, score_away, home_player_id, away_player_id,
+      home:players!matches_home_player_id_fkey(id, nickname),
+      away:players!matches_away_player_id_fkey(id, nickname)
+    `
+    )
+    .eq("tournament_id", tournament_id)
+    .eq("stage", "final")
+    .eq("status", "played")
+    .limit(1);
+  if (error) throw error;
+  if (!finals || !finals.length) return null;
+
+  const f = finals[0];
+  const homeWins = (f.score_home ?? 0) > (f.score_away ?? 0);
+  const winnerPlayer = homeWins
+    ? f.home || { id: f.home_player_id }
+    : f.away || { id: f.away_player_id };
+  const runnerUpPlayer = homeWins
+    ? f.away || { id: f.away_player_id }
+    : f.home || { id: f.home_player_id };
+  return { match: f, winnerPlayer, runnerUpPlayer };
 }

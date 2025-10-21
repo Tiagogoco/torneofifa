@@ -91,6 +91,24 @@ async function adminInit() {
 
   await renderPlayers();
   await renderMatches();
+  await renderChampion();
+}
+import { getChampionFromFinal } from "./supabase.js";
+
+async function renderChampion() {
+  const line = document.getElementById("championLine");
+  try {
+    const res = await getChampionFromFinal(TOURNAMENT.id);
+    if (!res) {
+      line.textContent = "— Aún sin campeón (espera resultado de la Final)";
+      return;
+    }
+    line.textContent = `🏆 Campeón: ${
+      res.winnerPlayer.nickname
+    } — Subcampeón: ${res.runnerUpPlayer?.nickname ?? "—"}`;
+  } catch (e) {
+    line.textContent = `Error al cargar campeón: ${e.message}`;
+  }
 }
 
 // ---------- Torneo ----------
@@ -191,7 +209,38 @@ function parseDDMMYYYY(str) {
 async function renderMatches() {
   let rows = await listMatches(TOURNAMENT.id);
 
-  // filtros
+  // --- Fallback: si el embed viene vacío, resolvemos nombres por ID ---
+  const missingIds = new Set();
+  for (const m of rows) {
+    if (!m.home?.id && m.home_player_id) missingIds.add(m.home_player_id);
+    if (!m.away?.id && m.away_player_id) missingIds.add(m.away_player_id);
+  }
+
+  let idToPlayer = new Map();
+  if (missingIds.size) {
+    const { data: fixPlayers, error: fixErr } = await sb
+      .from("players")
+      .select("id, nickname")
+      .in("id", Array.from(missingIds));
+    if (!fixErr && fixPlayers) {
+      idToPlayer = new Map(fixPlayers.map((p) => [p.id, p]));
+    }
+  }
+
+  // Helper para nombre ya sea por embed o por fallback
+  function getPlayerName(m, side /* 'home' | 'away' */) {
+    if (side === "home") {
+      return (
+        m.home?.nickname || idToPlayer.get(m.home_player_id)?.nickname || "—"
+      );
+    } else {
+      return (
+        m.away?.nickname || idToPlayer.get(m.away_player_id)?.nickname || "—"
+      );
+    }
+  }
+
+  // --- Filtros ---
   const stg = filterStage.value.trim().toLowerCase();
   const fDate = filterDate.value.trim();
 
@@ -212,10 +261,11 @@ async function renderMatches() {
     }
   }
 
+  // --- Render tabla ---
   matchesTable.innerHTML = rows
     .map((m) => {
-      const homeName = m.home?.nickname || "—";
-      const awayName = m.away?.nickname || "—";
+      const homeName = getPlayerName(m, "home");
+      const awayName = getPlayerName(m, "away");
       return `
         <tr>
           <td class="uppercase">${m.stage}</td>
@@ -255,7 +305,7 @@ async function renderMatches() {
     })
     .join("");
 
-  // lookups de grupos
+  // --- Lookups de grupos ---
   const groups = await listGroups(TOURNAMENT.id);
   const gmap = new Map(groups.map((g) => [g.id, g.code]));
   matchesTable.querySelectorAll("[data-group]").forEach((el) => {
@@ -263,7 +313,7 @@ async function renderMatches() {
     el.textContent = gmap.get(id) || "-";
   });
 
-  // Bind score
+  // --- Guardar score ---
   matchesTable.querySelectorAll("[data-save]").forEach((btn) => {
     btn.addEventListener("click", async () => {
       const id = btn.getAttribute("data-save");
@@ -278,7 +328,7 @@ async function renderMatches() {
     });
   });
 
-  // Bind fecha/hora
+  // --- Guardar fecha/hora ---
   matchesTable.querySelectorAll("[data-time]").forEach((btn) => {
     const id = btn.getAttribute("data-time");
     const input = matchesTable.querySelector(`[data-dt="${id}"]`);
