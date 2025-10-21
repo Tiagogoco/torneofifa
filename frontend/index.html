@@ -1,86 +1,103 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="es">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Torneo FC 26</title>
-  <link rel="stylesheet" href="styles.css" />
-</head>
-<body>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Torneo FC 26</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <!-- HERO BANNER (reemplaza header anterior) -->
+    <header class="hero-banner">
+      <!-- cambia la ruta por tu imagen -->
+      <img src="fc26.png" alt="Banner del torneo" />
+      <div class="hero-overlay"></div>
+      <div class="hero-content container">
+        <h1>Torneo FC 26</h1>
+      </div>
+    </header>
 
-  <!-- HERO BANNER (reemplaza header anterior) -->
-  <header class="hero-banner">
-    <!-- cambia la ruta por tu imagen -->
-    <img src="fc26.png" alt="Banner del torneo" />
-    <div class="hero-overlay"></div>
-    <div class="hero-content container">
-      <h1>Torneo FC 26</h1>
-    
-    </div>
-  </header>
+    <!-- Sub nav -->
+    <nav class="subnav">
+      <div class="container">
+        <ul class="subnav-list">
+          <li>
+            <a href="#" class="subnav-link active" data-view="partidos"
+              >Partidos</a
+            >
+          </li>
+          <li>
+            <a href="#" class="subnav-link" data-view="groups"
+              >Fase de grupos</a
+            >
+          </li>
+          <li>
+            <a href="#" class="subnav-link" data-view="bracket">Llaves</a>
+          </li>
+        </ul>
+      </div>
+    </nav>
 
-  <!-- Sub nav -->
-  <nav class="subnav">
-    <div class="container">
-      <ul class="subnav-list">
-        <li><a href="#" class="subnav-link active" data-view="partidos">Partidos</a></li>
-        <li><a href="#" class="subnav-link" data-view="groups">Fase de grupos</a></li>
-        <li><a href="#" class="subnav-link" data-view="bracket">Llaves</a></li>
-      </ul>
-    </div>
-  </nav>
-
-  <!-- Main -->
-  <main>
-    <!-- Vista: Partidos -->
-    <section id="view-partidos" class="view container">
-      <div class="matches-controls">
-        <div class="mc-row">
-          <input id="match-search" type="search" placeholder="Buscar jugador..." aria-label="Buscar jugador" />
-          <select id="match-phase" aria-label="Filtrar por fase">
-            <option value="all">Todas las fases</option>
-            <option value="groups" selected>Fase de grupos</option>
-            <option value="r16">Octavos de final</option>
-            <option value="qf">Cuartos de final</option>
-            <option value="sf">Semifinal</option>
-            <option value="final">Final</option>
-          </select>
-          <select id="match-group" aria-label="Filtrar por grupo (A-F)">
-            <option value="all" selected>Todos los grupos</option>
-            <option value="A">Grupo A</option>
-            <option value="B">Grupo B</option>
-            <option value="C">Grupo C</option>
-            <option value="D">Grupo D</option>
-            <option value="E">Grupo E</option>
-            <option value="F">Grupo F</option>
-          </select>
+    <!-- Main -->
+    <main>
+      <!-- Vista: Partidos -->
+      <section id="view-partidos" class="view container">
+        <div class="matches-controls">
+          <div class="mc-row">
+            <input
+              id="match-search"
+              type="search"
+              placeholder="Buscar jugador..."
+              aria-label="Buscar jugador"
+            />
+            <select id="match-phase" aria-label="Filtrar por fase">
+              <option value="all">Todas las fases</option>
+              <option value="groups" selected>Fase de grupos</option>
+              <option value="r16">Octavos de final</option>
+              <option value="qf">Cuartos de final</option>
+              <option value="sf">Semifinal</option>
+              <option value="final">Final</option>
+            </select>
+            <select id="match-group" aria-label="Filtrar por grupo (A-F)">
+              <option value="all" selected>Todos los grupos</option>
+              <option value="A">Grupo A</option>
+              <option value="B">Grupo B</option>
+              <option value="C">Grupo C</option>
+              <option value="D">Grupo D</option>
+              <option value="E">Grupo E</option>
+              <option value="F">Grupo F</option>
+            </select>
+          </div>
         </div>
+
+        <div id="matches-root" class="matches-list"></div>
+      </section>
+
+      <!-- Vista: Grupos -->
+      <section id="view-groups" class="view container" style="display: none">
+        <div class="groups-grid" id="groups-root"></div>
+      </section>
+
+      <!-- Vista: Llaves -->
+      <section id="view-bracket" class="view container" style="display: none">
+        <h2 class="bracket-title">Llaves</h2>
+        <div id="bracket" class="bracket">
+          <svg class="bracket-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+          <!-- grilla de rondas la inyecta app.js -->
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container">
+        © 2025 Torneo FIFA — Página pública (MVP). Próximo paso: panel de
+        administración.
       </div>
+    </footer>
 
-      <div id="matches-root" class="matches-list"></div>
-    </section>
-
-    <!-- Vista: Grupos -->
-    <section id="view-groups" class="view container" style="display:none">
-      <div class="groups-grid" id="groups-root"></div>
-    </section>
-
-    <!-- Vista: Llaves -->
-    <section id="view-bracket" class="view container" style="display:none">
-      <h2 class="bracket-title">Llaves</h2>
-      <div id="bracket" class="bracket">
-        <svg class="bracket-svg" xmlns="http://www.w3.org/2000/svg"></svg>
-        <!-- grilla de rondas la inyecta app.js -->
-      </div>
-    </section>
-  </main>
-
-  <footer class="site-footer">
-    <div class="container">
-      © 2025 Torneo FIFA — Página pública (MVP). Próximo paso: panel de administración.
-    </div>
-  </footer>
-
-  <script src="app.js"></script>
-</body>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../backend/js/env.js"></script>
+    <script type="module" src="../backend/js/supabase.js"></script>
+    <script type="module" src="./app.js"></script>
+  </body>
 </html>
