@@ -1,4 +1,4 @@
-// app.js (ESM)
+// frontend/app.js (reemplazo completo)
 import {
   sb,
   getTournamentBySlug,
@@ -26,8 +26,12 @@ document.querySelectorAll(".subnav-link").forEach((a) => {
     if (view === "bracket") scheduleRedraw();
   });
 });
+function isGroupStageComplete() {
+  // true si NO existe ningún partido de grupos pendiente
+  return !MATCHES_DB.some((m) => m.stage === "group" && m.status !== "played");
+}
 
-/* ================= Helpers mínimos ================= */
+/* ================= Helpers ================= */
 function el(tag, cls, html) {
   const n = document.createElement(tag);
   if (cls) n.className = cls;
@@ -45,7 +49,7 @@ function fmtDT(iso) {
   return { date: `${dd}-${mm}-${yyyy}`, time: `${hh}:${mi}` };
 }
 function computeGroupStandings(players, matches) {
-  const table = new Map(
+  const t = new Map(
     players.map((p) => [
       p.id,
       { player: p, PJ: 0, G: 0, E: 0, P: 0, GF: 0, GC: 0, DG: 0, Pts: 0 },
@@ -53,53 +57,48 @@ function computeGroupStandings(players, matches) {
   );
   for (const m of matches) {
     if (m.status !== "played") continue;
-    const h = table.get(m.home_player_id),
-      a = table.get(m.away_player_id);
-    if (!h || !a) continue;
-    h.PJ++;
-    a.PJ++;
-    h.GF += m.score_home ?? 0;
-    h.GC += m.score_away ?? 0;
-    h.DG = h.GF - h.GC;
-    a.GF += m.score_away ?? 0;
-    a.GC += m.score_home ?? 0;
-    a.DG = a.GF - a.GC;
+    const H = t.get(m.home_player_id),
+      A = t.get(m.away_player_id);
+    if (!H || !A) continue;
+    H.PJ++;
+    A.PJ++;
+    H.GF += m.score_home ?? 0;
+    H.GC += m.score_away ?? 0;
+    H.DG = H.GF - H.GC;
+    A.GF += m.score_away ?? 0;
+    A.GC += m.score_home ?? 0;
+    A.DG = A.GF - A.GC;
     if (m.score_home > m.score_away) {
-      h.G++;
-      h.Pts += 3;
-      a.P++;
+      H.G++;
+      H.Pts += 3;
+      A.P++;
     } else if (m.score_home < m.score_away) {
-      a.G++;
-      a.Pts += 3;
-      h.P++;
+      A.G++;
+      A.Pts += 3;
+      H.P++;
     } else {
-      h.E++;
-      a.E++;
-      h.Pts++;
-      a.Pts++;
+      H.E++;
+      A.E++;
+      H.Pts++;
+      A.Pts++;
     }
   }
-  const rows = [...table.values()];
+  const rows = [...t.values()];
   rows.sort(
     (x, y) => y.Pts - x.Pts || y.DG - x.DG || y.GF - x.GF || Math.random() - 0.5
   );
   return rows;
 }
 
-/* ================== Carga de datos desde Supabase ================== */
+/* ================== Carga de datos ================== */
 let TOURNAMENT = null;
 let GROUPS_DB = []; // [{id, code, members:[{player}]}]
-let MATCHES_DB = []; // select con embeds home/away
+let MATCHES_DB = []; // matches con embed
 
 async function loadData() {
   TOURNAMENT = await getTournamentBySlug(env.TOURNAMENT_SLUG);
-  console.log("TOURNAMENT", TOURNAMENT);
-
   GROUPS_DB = await listGroups(TOURNAMENT.id);
   MATCHES_DB = await listMatches(TOURNAMENT.id);
-
-  console.log("GROUPS_DB", GROUPS_DB);
-  console.log("MATCHES_DB (len)", MATCHES_DB.length, MATCHES_DB);
 }
 
 /* ================== PARTIDOS: lista + filtros ================== */
@@ -122,9 +121,7 @@ function phaseLabel(phase) {
     }[phase] || phase
   );
 }
-
 function mapStageToPhase(stage) {
-  // Backend: 'group' | 'quarter' | 'semi' | 'final'
   return stage === "group"
     ? "groups"
     : stage === "quarter"
@@ -135,9 +132,7 @@ function mapStageToPhase(stage) {
     ? "final"
     : stage;
 }
-
 function mapToUIMatches() {
-  // Une datos de grupos para sacar letra por group_id
   const groupMap = new Map(GROUPS_DB.map((g) => [g.id, g.code]));
   return MATCHES_DB.map((m) => {
     const phase = mapStageToPhase(m.stage);
@@ -158,7 +153,6 @@ function mapToUIMatches() {
     };
   });
 }
-
 function sortMatches(list) {
   return list.slice().sort((a, b) => {
     const pa = PHASE_ORDER[a.phase] - PHASE_ORDER[b.phase];
@@ -173,7 +167,6 @@ function sortMatches(list) {
     return String(a.id).localeCompare(String(b.id));
   });
 }
-
 function matchCardListItem(m) {
   const wrap = el("div", "match-card");
   const head = el("div", "match-head");
@@ -191,28 +184,25 @@ function matchCardListItem(m) {
   );
   head.appendChild(left);
   head.appendChild(right);
-
   const title = el("div", "match-title", `${m.a} vs ${m.b}`);
   const meta = el("div", "match-meta");
   meta.appendChild(el("div", null, `🗓 Fecha: ${m.date}`));
   meta.appendChild(el("div", null, `⏰ Hora: ${m.time}`));
-
   wrap.appendChild(head);
   wrap.appendChild(title);
   wrap.appendChild(meta);
   return wrap;
 }
-
 function renderMatchesList() {
   let list = mapToUIMatches();
 
-  const phaseVal = phaseSelect.value; // all | groups | r16 | qf | sf | final
+  const phaseVal = phaseSelect.value;
   if (phaseVal !== "all") list = list.filter((m) => m.phase === phaseVal);
 
-  const showGroupsFilter = phaseVal === "groups";
-  groupSelect.style.display = showGroupsFilter ? "" : "none";
-  if (showGroupsFilter) {
-    const gVal = groupSelect.value; // all | A..F
+  const showGroups = phaseVal === "groups";
+  groupSelect.style.display = showGroups ? "" : "none";
+  if (showGroups) {
+    const gVal = groupSelect.value;
     if (gVal !== "all") list = list.filter((m) => m.group === gVal);
   }
 
@@ -235,25 +225,24 @@ function renderMatchesList() {
   }
   list.forEach((m) => matchesRoot.appendChild(matchCardListItem(m)));
 }
-
 searchInput.addEventListener("input", renderMatchesList);
 phaseSelect.addEventListener("change", renderMatchesList);
 groupSelect.addEventListener("change", renderMatchesList);
 
-/* ================== GRUPOS: tabla de posiciones ================== */
+/* ================== GRUPOS: tabla ================== */
 const groupsRoot = document.getElementById("groups-root");
-
 function renderGroupsStandings() {
+  if (!groupsRoot) return;
   groupsRoot.innerHTML = "";
-  // matches por grupo
+
+  // Agrupa partidos por group_id (solo fase de grupos)
   const byGroupId = MATCHES_DB.reduce((acc, m) => {
     if (m.stage !== "group" || !m.group_id) return acc;
-    acc[m.group_id] ||= [];
-    acc[m.group_id].push(m);
+    (acc[m.group_id] ||= []).push(m);
     return acc;
   }, {});
 
-  // orden por código (A..F)
+  // Ordenar grupos por código (A..F)
   const groupsSorted = [...GROUPS_DB].sort((a, b) =>
     a.code.localeCompare(b.code)
   );
@@ -268,15 +257,22 @@ function renderGroupsStandings() {
 
     const head = document.createElement("div");
     head.className = "group-header";
-    head.innerHTML = `<div class="group-rail"></div><div class="group-name">Grupo ${g.code}</div>`;
+    head.innerHTML = `
+      <div class="group-rail"></div>
+      <div class="group-name">Grupo ${g.code}</div>
+    `;
 
     const tableEl = document.createElement("table");
     tableEl.className = "table";
     tableEl.innerHTML = `
       <thead>
         <tr>
-          <th>#</th><th>Jugador</th><th>PJ</th><th>G</th><th>E</th><th>P</th>
-          <th>GF</th><th>GC</th><th>DG</th><th>Pts</th>
+          <th>#</th>
+          <th>Jugador</th>
+          <th>PJ</th><th>G</th><th>E</th><th>P</th>
+          <th>GF</th><th>GC</th>
+          <th>DG</th>
+          <th>Pts</th>
         </tr>
       </thead>
       <tbody></tbody>
@@ -284,31 +280,38 @@ function renderGroupsStandings() {
     const tbody = tableEl.querySelector("tbody");
 
     table.forEach((row, idx) => {
-      const t = row;
       const tr = document.createElement("tr");
       tr.innerHTML = `
         <td>${idx + 1}</td>
         <td><span class="badge"><span class="code">${
-          t.player.nickname
+          row.player.nickname
         }</span></span></td>
-        <td>${t.PJ}</td><td>${t.G}</td><td>${t.E}</td><td>${t.P}</td>
-        <td>${t.GF}</td><td>${t.GC}</td>
-        <td class="${t.DG >= 0 ? "dg-pos" : "dg-neg"}">${t.DG}</td>
-        <td><strong>${t.Pts}</strong></td>
+        <td>${row.PJ}</td>
+        <td>${row.G}</td>
+        <td>${row.E}</td>
+        <td>${row.P}</td>
+        <td>${row.GF}</td>
+        <td>${row.GC}</td>
+        <td class="${row.DG >= 0 ? "dg-pos" : "dg-neg"}">${row.DG}</td>
+        <td><strong>${row.Pts}</strong></td>
       `;
       tbody.appendChild(tr);
     });
 
+    // ⬇️ Wrapper scrolleable para móvil
+    const scroller = document.createElement("div");
+    scroller.className = "table-wrap";
+    scroller.appendChild(tableEl);
+
     card.appendChild(head);
-    card.appendChild(tableEl);
+    card.appendChild(scroller);
     groupsRoot.appendChild(card);
   }
 }
 
-/* ================== BRACKET: construir desde matches ================== */
+/* ================== LLAVES: construir desde matches o grupos ================== */
 window.BRACKET_DATA = {
-  // No generamos Octavos porque backend inicia en Cuartos (top8).
-  octavos: [],
+  seeds: [],
   cuartos: [{ id: "QF1" }, { id: "QF2" }, { id: "QF3" }, { id: "QF4" }],
   semifinal: [{ id: "SF1" }, { id: "SF2" }],
   final: [{ id: "F1" }],
@@ -333,7 +336,188 @@ function matchCard(m) {
   card.appendChild(teamRow({ name: m.teamB?.name, score: m.scoreB }));
   return card;
 }
+function sortStandingRows(a, b) {
+  return b.Pts - a.Pts || b.DG - a.DG || b.GF - a.GF || Math.random() - 0.5;
+}
+function computeTop8Seeds() {
+  const byGroupId = MATCHES_DB.reduce((acc, m) => {
+    if (m.stage !== "group" || !m.group_id) return acc;
+    acc[m.group_id] ||= [];
+    acc[m.group_id].push(m);
+    return acc;
+  }, {});
+  const groupsSorted = [...GROUPS_DB].sort((a, b) =>
+    a.code.localeCompare(b.code)
+  );
+  const winners = [],
+    seconds = [],
+    thirds = [];
+  for (const g of groupsSorted) {
+    const players = (g.members || []).map((x) => x.player);
+    const matches = byGroupId[g.id] || [];
+    const rows = computeGroupStandings(players, matches);
+    if (rows[0]) winners.push({ group: g.code, ...rows[0] });
+    if (rows[1]) seconds.push({ group: g.code, ...rows[1] });
+    if (rows[2]) thirds.push({ group: g.code, ...rows[2] });
+  }
+  winners.sort(sortStandingRows);
+  seconds.sort(sortStandingRows);
+  thirds.sort(sortStandingRows);
+  const seeds = [];
+  winners.forEach((w) => seeds.push(w.player));
+  seconds.forEach((s) => {
+    if (seeds.length < 8) seeds.push(s.player);
+  });
+  thirds.forEach((t) => {
+    if (seeds.length < 8) seeds.push(t.player);
+  });
+  return seeds.slice(0, 8);
+}
 
+let quartersSource = [],
+  semisSource = [];
+
+function toCard(m) {
+  return {
+    id: mapStageToCardId(m),
+    teamA: { name: m.home?.nickname || "—" },
+    teamB: { name: m.away?.nickname || "—" },
+    scoreA: m.score_home ?? null,
+    scoreB: m.score_away ?? null,
+  };
+}
+
+function mapStageToCardId(m) {
+  if (m.stage === "quarter") {
+    const i = quartersSource.indexOf(m);
+    return `QF${i + 1}`;
+  }
+  if (m.stage === "semi") {
+    const i = semisSource.indexOf(m);
+    return `SF${i + 1}`;
+  }
+  if (m.stage === "final") {
+    return "F1";
+  }
+  return `M_${m.id}`;
+}
+
+function fillBracketFromMatches() {
+  quartersSource = MATCHES_DB.filter((m) => m.stage === "quarter").sort(
+    (a, b) => (a.start_at || "").localeCompare(b.start_at || "")
+  );
+  semisSource = MATCHES_DB.filter((m) => m.stage === "semi").sort((a, b) =>
+    (a.start_at || "").localeCompare(b.start_at || "")
+  );
+  const finalBd = MATCHES_DB.filter((m) => m.stage === "final").sort((a, b) =>
+    (a.start_at || "").localeCompare(b.start_at || "")
+  );
+
+  const groupsDone = isGroupStageComplete();
+
+  // ---- CUARTOS ----
+  let quarters = quartersSource.map(toCard);
+
+  if (quarters.length < 4) {
+    // Si los grupos NO están completos, NO sembramos desde grupos.
+    if (!groupsDone) {
+      window.BRACKET_DATA.seeds = []; // oculta “Desde Grupos”
+      // Solo placeholders
+      for (let i = quarters.length; i < 4; i++) {
+        quarters.push({
+          id: `QF${i + 1}`,
+          teamA: { name: "Por definirse" },
+          teamB: { name: "Por definirse" },
+          scoreA: null,
+          scoreB: null,
+        });
+      }
+    } else {
+      // Grupos completos ⇒ sembrar desde standings (top 8)
+      const seeds = computeTop8Seeds(); // ya la tienes
+      window.BRACKET_DATA.seeds = seeds.map((p, i) => ({
+        pos: i + 1,
+        name: p?.nickname || "—",
+      }));
+      if (seeds.length === 8) {
+        const pairing = [
+          [0, 7],
+          [3, 4],
+          [1, 6],
+          [2, 5],
+        ]; // 1v8,4v5,2v7,3v6
+        const placeholders = pairing.map(([i, j], idx) => ({
+          id: `QF${idx + 1}`,
+          teamA: { name: seeds[i]?.nickname || "—" },
+          teamB: { name: seeds[j]?.nickname || "—" },
+          scoreA: null,
+          scoreB: null,
+        }));
+        const mapById = new Map(quarters.map((q) => [q.id, q]));
+        quarters = placeholders.map((ph) => mapById.get(ph.id) || ph);
+      } else {
+        // Por si faltaran jugadores válidos, rellena
+        for (let i = quarters.length; i < 4; i++) {
+          quarters.push({
+            id: `QF${i + 1}`,
+            teamA: { name: "Por definirse" },
+            teamB: { name: "Por definirse" },
+            scoreA: null,
+            scoreB: null,
+          });
+        }
+      }
+    }
+  } else {
+    // Si hay 4 desde BD, fija IDs
+    quarters = quarters
+      .slice(0, 4)
+      .map((q, idx) => ({ ...q, id: `QF${idx + 1}` }));
+    // En este caso puedes mantener/mostrar seeds como referencia o vaciar:
+    window.BRACKET_DATA.seeds = [];
+  }
+
+  // ---- SEMIS ----
+  let semis = semisSource.map(toCard);
+  for (let i = semis.length; i < 2; i++) {
+    semis.push({
+      id: `SF${i + 1}`,
+      teamA: { name: "Por definirse" },
+      teamB: { name: "Por definirse" },
+      scoreA: null,
+      scoreB: null,
+    });
+  }
+  semis = semis.slice(0, 2).map((s, idx) => ({ ...s, id: `SF${idx + 1}` }));
+
+  // ---- FINAL ----
+  let final = finalBd.map(toCard);
+  if (!final.length)
+    final = [
+      {
+        id: "F1",
+        teamA: { name: "Por definirse" },
+        teamB: { name: "Por definirse" },
+        scoreA: null,
+        scoreB: null,
+      },
+    ];
+  else final = [{ ...final[0], id: "F1" }];
+
+  // ---- Campeón ----
+  const F = final[0];
+  if (F && F.scoreA != null && F.scoreB != null && F.scoreA !== F.scoreB) {
+    window.BRACKET_DATA.campeon = F.scoreA > F.scoreB ? F.teamA : F.teamB;
+  } else window.BRACKET_DATA.campeon = null;
+
+  window.BRACKET_DATA.cuartos = quarters;
+  window.BRACKET_DATA.semifinal = semis;
+  window.BRACKET_DATA.final = final;
+
+  renderBracket();
+}
+
+/* Render/posicionado */
 function renderBracket() {
   const root = document.getElementById("bracket");
   if (!root) return;
@@ -341,14 +525,40 @@ function renderBracket() {
   root.querySelectorAll(".bracket-grid").forEach((n) => n.remove());
   const grid = el("div", "bracket-grid");
 
-  // Cuartos
+  // Columna Seeds (opcional)
+  const seeds = window.BRACKET_DATA.seeds || [];
+  if (seeds.length) {
+    const colSeeds = el("div", "round seeds");
+    colSeeds.id = "round-seeds";
+    colSeeds.appendChild(el("div", "round-title", "Desde Grupos"));
+    const ul = el("ul", "seeds-list");
+    seeds.forEach((s) => ul.appendChild(el("li", null, `${s.pos}. ${s.name}`)));
+    colSeeds.appendChild(ul);
+    grid.appendChild(colSeeds);
+  }
+  const colSeeds = el("div", "round seeds");
+  colSeeds.id = "round-seeds";
+
+  colSeeds.appendChild(el("div", "round-title", "Desde Grupos"));
+  if (seeds.length) {
+    const ul = el("ul", "seeds-list");
+    seeds.forEach((s) => ul.appendChild(el("li", null, `${s.pos}. ${s.name}`)));
+    colSeeds.appendChild(ul);
+  } else {
+    colSeeds.appendChild(
+      el("div", "muted", "A la espera de resultados de grupos")
+    );
+  }
+  grid.appendChild(colSeeds);
+
+  // QF
   const qf = el("div", "round quarters");
   qf.id = "round-qf";
   qf.appendChild(el("div", "round-title", "Cuartos de final"));
   window.BRACKET_DATA.cuartos.forEach((m) => qf.appendChild(matchCard(m)));
   grid.appendChild(qf);
 
-  // Semifinal
+  // SF
   const sf = el("div", "round semis");
   sf.id = "round-sf";
   sf.appendChild(el("div", "round-title", "Semifinal"));
@@ -374,7 +584,6 @@ function renderBracket() {
   scheduleRedraw();
 }
 
-// Posicionamiento/curvas (reuso tu lógica, sin octavos)
 function centerYIn(el, colRect, container) {
   const r = el.getBoundingClientRect();
   const cy = (r.top + r.bottom) / 2;
@@ -400,8 +609,9 @@ function getCenterLeft(el, container) {
     y: (r.top + r.bottom) / 2 - rc.top + container.scrollTop,
   };
 }
-
 function positionRounds() {
+  const isMobile = window.matchMedia("(max-width: 560px)").matches;
+  if (isMobile) return;
   const container = document.getElementById("bracket");
   const roundQF = document.getElementById("round-qf");
   const roundSF = document.getElementById("round-sf");
@@ -416,7 +626,6 @@ function positionRounds() {
     return;
   }
 
-  // Semis entre QF
   const rcSF = roundSF.getBoundingClientRect();
   const qfs = ["QF1", "QF2", "QF3", "QF4"]
     .map((id) => document.getElementById(id))
@@ -441,7 +650,6 @@ function positionRounds() {
   if (bottomsSF.length)
     roundSF.style.minHeight = `${Math.max(...bottomsSF) + 16}px`;
 
-  // Final entre Semis
   const rcFIN = roundFIN.getBoundingClientRect();
   const f1 = document.getElementById("F1");
   if (sf1 && sf2 && f1) {
@@ -456,7 +664,6 @@ function positionRounds() {
     roundFIN.style.minHeight = `${finalBottom + 16}px`;
   }
 }
-
 function scheduleRedraw() {
   requestAnimationFrame(() => {
     positionRounds();
@@ -468,6 +675,17 @@ function scheduleRedraw() {
   });
 }
 function drawBracketConnections() {
+  const isMobile = window.matchMedia("(max-width: 560px)").matches;
+  if (isMobile) {
+    // en móvil no dibujamos cables
+    const svg = document.querySelector(".bracket-svg");
+    if (svg) {
+      svg.setAttribute("width", 0);
+      svg.setAttribute("height", 0);
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+    }
+    return;
+  }
   const container = document.getElementById("bracket");
   if (!container) return;
   const grid = container.querySelector(".bracket-grid");
@@ -486,7 +704,6 @@ function drawBracketConnections() {
     { from: "SF1", to: "F1" },
     { from: "SF2", to: "F1" },
   ];
-
   pairs.forEach((p) => {
     const fromEl = document.getElementById(p.from);
     const toEl = document.getElementById(p.to);
@@ -501,72 +718,6 @@ function drawBracketConnections() {
     path.setAttribute("stroke-linecap", "round");
     svg.appendChild(path);
   });
-}
-window.addEventListener("resize", scheduleRedraw);
-document.getElementById("bracket").addEventListener("scroll", () => {
-  clearTimeout(window.__brk_t);
-  window.__brk_t = setTimeout(scheduleRedraw, 50);
-});
-const mq = window.matchMedia("(max-width: 560px)");
-if (mq.addEventListener) mq.addEventListener("change", scheduleRedraw);
-else if (mq.addListener) mq.addListener(scheduleRedraw);
-
-/* ================== Armar datos del bracket desde MATCHES_DB ================== */
-function fillBracketFromMatches() {
-  // Construye equipos (nombre y score) para QF/SF/Final
-  const byStage = {
-    quarter: MATCHES_DB.filter((m) => m.stage === "quarter"),
-    semi: MATCHES_DB.filter((m) => m.stage === "semi"),
-    final: MATCHES_DB.filter((m) => m.stage === "final"),
-  };
-
-  const toCard = (m) => ({
-    id: mapStageToCardId(m),
-    teamA: { name: m.home?.nickname || "—" },
-    teamB: { name: m.away?.nickname || "—" },
-    scoreA: m.score_home ?? null,
-    scoreB: m.score_away ?? null,
-  });
-
-  // Map: determinístico por creación/orden
-  const quarters = byStage.quarter.slice(0, 4).map(toCard);
-  const semis = byStage.semi.slice(0, 2).map(toCard);
-  const final = byStage.final.slice(0, 1).map(toCard);
-
-  // IDs amigables: QF1..4, SF1..2, F1
-  function mapStageToCardId(m) {
-    if (m.stage === "quarter") {
-      const i = byStage.quarter.indexOf(m);
-      return `QF${i + 1}`;
-    }
-    if (m.stage === "semi") {
-      const i = byStage.semi.indexOf(m);
-      return `SF${i + 1}`;
-    }
-    if (m.stage === "final") {
-      return "F1";
-    }
-    return `M_${m.id}`;
-  }
-
-  window.BRACKET_DATA.cuartos = quarters;
-  window.BRACKET_DATA.semifinal = semis;
-  window.BRACKET_DATA.final = final;
-
-  // Campeón (si la final está jugada y no hay empate)
-  if (
-    final[0] &&
-    final[0].scoreA != null &&
-    final[0].scoreB != null &&
-    final[0].scoreA !== final[0].scoreB
-  ) {
-    window.BRACKET_DATA.campeon =
-      final[0].scoreA > final[0].scoreB ? final[0].teamA : final[0].teamB;
-  } else {
-    window.BRACKET_DATA.campeon = null;
-  }
-
-  renderBracket();
 }
 
 /* ================== Boot ================== */
